@@ -63,6 +63,9 @@ jobs:
 
         # Install R dependencies
         sudo apt-get install -y gfortran libreadline6-dev libx11-dev libxt-dev libpng-dev libjpeg-dev libcairo2-dev libbz2-dev libzstd-dev liblzma-dev libcurl4-openssl-dev texinfo texlive texlive-fonts-extra screen libpcre2-dev
+        sudo apt-get update
+        sudo apt-get upgrade curl -y
+        curl --version
 
     - name: Install R from source
       run: |
