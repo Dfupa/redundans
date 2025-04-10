@@ -7,7 +7,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, 3.10]  # Specify the Python versions to test
+
     steps:
     - uses: actions/checkout@v4
-    - name: Build the Docker image for the test
-      run: docker build . --file Dockerfile --tag redundans:$(date +%s)
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Build the Docker image for the test with Python ${{ matrix.python-version }}
+      run: |
+        sed -i "s/FROM python:3.9.1/FROM python:${{ matrix.python-version }}/" Dockerfile  # Replace Python version in the Dockerfile
+        docker build . --file Dockerfile --tag redundans:${{ matrix.python-version }}-$(date +%s)
