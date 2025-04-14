@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-desc="""Heterozygous genome assembly pipeline. It consists of three steps:
+desc = """Heterozygous genome assembly pipeline. It consists of three steps:
 reduction, scaffolding and gap closing.
 
 More info at: http://bit.ly/Redundans
 
 """
-epilog="""Author:
+epilog = """Author:
 l.p.pryszcz+git@gmail.com
 Mizerow/Warsaw/Bratislava/Barcelona, 17/10/2014
 
@@ -23,11 +23,23 @@ from traceback import print_list
 
 # update sys.path & environmental PATH
 root = os.path.dirname(os.path.abspath(sys.argv[0]))
-src = ["bin/", "bin/bwa/", "bin/snap/", "bin/pyScaf/", "bin/last/build/", "/usr/bin/", "bin/gfastats/build/bin",
-    "bin/last/bin/", "bin/last/src/", "bin/minimap2/", "bin/miniasm/", "bin/merqury"]
+src = [
+    "bin/",
+    "bin/bwa/",
+    "bin/snap/",
+    "bin/pyScaf/",
+    "bin/last/build/",
+    "/usr/bin/",
+    "bin/gfastats/build/bin",
+    "bin/last/bin/",
+    "bin/last/src/",
+    "bin/minimap2/",
+    "bin/miniasm/",
+    "bin/merqury",
+]
 paths = [os.path.join(root, p) for p in src]
 sys.path = paths + sys.path
-os.environ["PATH"] = "%s:%s"%(':'.join(paths), os.environ["PATH"])
+os.environ["PATH"] = "%s:%s" % (":".join(paths), os.environ["PATH"])
 
 # make sure using Python 3
 assert sys.version_info >= (3,), "Only Python 3 is supported!"
@@ -41,49 +53,79 @@ from fasta2scaffold import LongReadGraph, SyntenyGraph
 from denovo import denovo
 from merylqury2analysis import _build_meryldb, merqury_statistics
 
+
 def timestamp():
     """Return formatted date-time string"""
-    return "\n%s\n[%s] "%("#"*50, datetime.ctime(datetime.now()))
+    return "\n%s\n[%s] " % ("#" * 50, datetime.ctime(datetime.now()))
 
-def get_libraries(fastq, fasta, mapq=10, threads=4, verbose=1, log=sys.stderr, limit=0,
-                  libraries=[], stdfracTh=0.66, maxcfracTh=0.9, genomeFrac=0.05, usebwa=0):
+
+def get_libraries(
+    fastq,
+    fasta,
+    mapq=10,
+    threads=4,
+    verbose=1,
+    log=sys.stderr,
+    limit=0,
+    libraries=[],
+    stdfracTh=0.66,
+    maxcfracTh=0.9,
+    genomeFrac=0.05,
+    usebwa=0,
+):
     """Return libraries"""
     # skip if all libs OKish
     ## max stdfrac cannot be larger than stdfracTh in any of the libraries
-    if libraries and not [x for x in (max(lib[5]) for lib in libraries) if x>stdfracTh]:
+    if libraries and not [
+        x for x in (max(lib[5]) for lib in libraries) if x > stdfracTh
+    ]:
         return libraries
-    
+
     # otherwise process all reads
-    if not limit or limit<10e5:
+    if not limit or limit < 10e5:
         limit = 10e5
-    
+
     # get libraries statistics using 1% of mapped read limit
-    libdata = fastq2insert_size(log, fastq, fasta, mapq, threads, limit/100, genomeFrac, stdfracTh, maxcfracTh, usebwa=usebwa)
+    libdata = fastq2insert_size(
+        log,
+        fastq,
+        fasta,
+        mapq,
+        threads,
+        limit / 100,
+        genomeFrac,
+        stdfracTh,
+        maxcfracTh,
+        usebwa=usebwa,
+    )
     # separate paired-end & mate pairs
     ## also separate 300 and 600 paired-ends
     libraries = []
     # add libraries strating from lowest insert size
     for data in sorted(libdata, key=lambda x: x[3]):
         fq1, fq2, readlen, ismedian, ismean, isstd, pairs, orientation = data
-        # add new library set if 
-        if not libraries or ismean > 1.5*libraries[-1][4][0]:
+        # add new library set if
+        if not libraries or ismean > 1.5 * libraries[-1][4][0]:
             # libnames, readlen, libFs, libRs, orientations, libIS, libISStDev
             libraries.append([[], [], [], [], [], [], []])
             i = 1
         # add libname & fastq files
-        libraries[-1][0].append("lib%s"%i)
+        libraries[-1][0].append("lib%s" % i)
         libraries[-1][1].append(open(fq1))
         libraries[-1][2].append(open(fq2))
         libraries[-1][6].append(readlen)
         # orientation
-        #orientation = get_orientation(pairs, fq1, fq2, log, maxcfracTh)
+        # orientation = get_orientation(pairs, fq1, fq2, log, maxcfracTh)
         libraries[-1][3].append(orientation)
         # insert size information
         libraries[-1][4].append(int(ismean))
         stdfrac = isstd / ismean
         # capture large stdev
         if stdfrac > stdfracTh:
-            log.write("[WARNING] Highly variable insert size (%.f +- %.2f) in %s - %s!\n"%(ismean, isstd, fq1, fq2))
+            log.write(
+                "[WARNING] Highly variable insert size (%.f +- %.2f) in %s - %s!\n"
+                % (ismean, isstd, fq1, fq2)
+            )
         # SSSPACE accepts stdfrac 0-1.0
         if stdfrac > 1:
             stdfrac = 1.0
@@ -91,6 +133,7 @@ def get_libraries(fastq, fasta, mapq=10, threads=4, verbose=1, log=sys.stderr, l
         # update counter
         i += 1
     return libraries
+
 
 def get_read_limit(fasta, readLimit, verbose, log=sys.stderr):
     """Return read limit and libraries."""
@@ -101,13 +144,14 @@ def get_read_limit(fasta, readLimit, verbose, log=sys.stderr):
         fastaSize = faidx.genomeSize
         limit = int(readLimit * fastaSize)
         if verbose:
-            log.write(" Aligning %s mates per library...\n"%limit)
+            log.write(" Aligning %s mates per library...\n" % limit)
     return limit
+
 
 def generate_gfa_file(file, threads="4"):
     """Return a gfa file generated using gfastats"""
 
-    #First process the filename to add the new extension
+    # First process the filename to add the new extension
 
     abs_path_gfa = os.path.abspath(re.sub(".fa", ".gfa", file))
 
@@ -117,14 +161,37 @@ def generate_gfa_file(file, threads="4"):
         proc1 = subprocess.Popen(args1, stderr=subprocess.DEVNULL, stdout=f)
         proc1.communicate()
 
+    if os.path.exists(abs_path_gfa):
+        return True
+    else:
+        return False
 
-    if os.path.exists(abs_path_gfa): return True
-    else: return False
 
-    
-def run_scaffolding(outdir, scaffoldsFname, fastq, libraries, reducedFname, mapq, threads, \
-                    joins, linkratio, limit, iters, sspacebin, gapclosing, verbose, usebwa, log, \
-                    identity, overlap, minLength, resume, useminimap2=0, preset="asm10", lib=""):
+def run_scaffolding(
+    outdir,
+    scaffoldsFname,
+    fastq,
+    libraries,
+    reducedFname,
+    mapq,
+    threads,
+    joins,
+    linkratio,
+    limit,
+    iters,
+    sspacebin,
+    gapclosing,
+    verbose,
+    usebwa,
+    log,
+    identity,
+    overlap,
+    minLength,
+    resume,
+    useminimap2=0,
+    preset="asm10",
+    lib="",
+):
     """Execute scaffolding step using libraries with increasing insert size
     in multiple iterations.
     """
@@ -133,57 +200,111 @@ def run_scaffolding(outdir, scaffoldsFname, fastq, libraries, reducedFname, mapq
     while i < len(libraries):
         libnames, libFs, libRs, orients, libIS, libISStDev, libreadlen = libraries[i]
         i += 1
-        for j in range(1, iters+1):
-            out = os.path.join(outdir, "_sspace.%s.%s"%(i, j))
+        for j in range(1, iters + 1):
+            out = os.path.join(outdir, "_sspace.%s.%s" % (i, j))
             # resume if files don't exist
-            if resume>1 or _corrupted_file(out+".fa"):
+            if resume > 1 or _corrupted_file(out + ".fa"):
                 resume += 1
                 if verbose:
-                    log.write(" iteration %s.%s: %s"%(i, j, FastaIndex(pout).stats()))
+                    log.write(" iteration %s.%s: %s" % (i, j, FastaIndex(pout).stats()))
                 lib = ""
                 # run fastq scaffolding
-                fastq2sspace(out, open(pout), lib, libnames, libFs, libRs, orients, \
-                             libIS, libISStDev, libreadlen, threads, mapq, limit, linkratio, joins, \
-                             sspacebin, verbose=0, usebwa=usebwa, log=log)
+                fastq2sspace(
+                    out,
+                    open(pout),
+                    lib,
+                    libnames,
+                    libFs,
+                    libRs,
+                    orients,
+                    libIS,
+                    libISStDev,
+                    libreadlen,
+                    threads,
+                    mapq,
+                    limit,
+                    linkratio,
+                    joins,
+                    sspacebin,
+                    verbose=0,
+                    usebwa=usebwa,
+                    log=log,
+                )
             # store out info
-            pout = out+".fa"
+            pout = out + ".fa"
             # link output ie out/_sspace.1.1/_sspace.1.1.scaffolds.fasta --> out/_sspace.1.1.scaffolds.fasta
-            targetout = os.path.join(os.path.basename(out), os.path.basename(out+".final.scaffolds.fasta"))
+            targetout = os.path.join(
+                os.path.basename(out), os.path.basename(out + ".final.scaffolds.fasta")
+            )
             symlink(targetout, pout)
         # if number of gaps larger than 1%, run gap closer & reduction
-        stats     = FastaIndex(pout).stats()
-        fastaSize = int(stats.split('\t')[2])
-        gapSize   = int(stats.split('\t')[-2])
-        if i<len(libraries) and gapclosing and 1.0 * gapSize / fastaSize > 0.02:
+        stats = FastaIndex(pout).stats()
+        fastaSize = int(stats.split("\t")[2])
+        gapSize = int(stats.split("\t")[-2])
+        if i < len(libraries) and gapclosing and 1.0 * gapSize / fastaSize > 0.02:
             nogapsFname = ".".join(pout.split(".")[:-1]) + ".filled.fa"
-            if resume>1 or _corrupted_file(nogapsFname):
+            if resume > 1 or _corrupted_file(nogapsFname):
                 resume += 1
                 # close gaps & reduce
                 if verbose:
                     log.write("  closing gaps ...\n")
-                basename    = "_sspace.%s.%s._gapcloser"%(i, j)
-                run_gapclosing(outdir, [libraries[i-1],], nogapsFname, pout, threads, limit, \
-                               iters, resume=resume, verbose=0, log=log, basename=basename)
+                basename = "_sspace.%s.%s._gapcloser" % (i, j)
+                run_gapclosing(
+                    outdir,
+                    [
+                        libraries[i - 1],
+                    ],
+                    nogapsFname,
+                    pout,
+                    threads,
+                    limit,
+                    iters,
+                    resume=resume,
+                    verbose=0,
+                    log=log,
+                    basename=basename,
+                )
             reducedFname = ".".join(pout.split(".")[:-1]) + ".reduced.fa"
-            if resume>1 or _corrupted_file(reducedFname):
+            if resume > 1 or _corrupted_file(reducedFname):
                 if verbose:
                     log.write("  reducing ...\n")
                 with open(reducedFname, "w") as out:
-                    info = fasta2homozygous(out, open(nogapsFname), identity, overlap, minLength, threads, verbose=0, useminimap2=useminimap2, preset=preset,log=log)
-            pout = reducedFname            
+                    info = fasta2homozygous(
+                        out,
+                        open(nogapsFname),
+                        identity,
+                        overlap,
+                        minLength,
+                        threads,
+                        verbose=0,
+                        useminimap2=useminimap2,
+                        preset=preset,
+                        log=log,
+                    )
+            pout = reducedFname
         # update library insert size estimation, especially for mate-pairs
-        libraries = get_libraries(fastq, pout, mapq, threads, verbose=0,log=log, libraries=libraries, usebwa=usebwa)
+        libraries = get_libraries(
+            fastq,
+            pout,
+            mapq,
+            threads,
+            verbose=0,
+            log=log,
+            libraries=libraries,
+            usebwa=usebwa,
+        )
     # create symlink to final scaffolds or pout
     symlink(os.path.basename(pout), scaffoldsFname)
-    symlink(os.path.basename(pout+".fai"), scaffoldsFname+".fai")
+    symlink(os.path.basename(pout + ".fai"), scaffoldsFname + ".fai")
     return libraries, resume
+
 
 def filter_reads(outdir, fq1, fq2, minlen, maxlen, limit, minqual=10):
     """Filter FastQ files and return output fnames."""
     fastq = (fq1, fq2)
     # generate output files
-    fn1 = os.path.join(outdir, "_reads.%s"%(os.path.basename(fq1.name.rstrip('.gz'))))
-    fn2 = os.path.join(outdir, "_reads.%s"%(os.path.basename(fq2.name.rstrip('.gz'))))
+    fn1 = os.path.join(outdir, "_reads.%s" % (os.path.basename(fq1.name.rstrip(".gz"))))
+    fn2 = os.path.join(outdir, "_reads.%s" % (os.path.basename(fq2.name.rstrip(".gz"))))
     # skip if fq files already generated
     if os.path.isfile(fn1) and os.path.isfile(fn2):
         # notify about empty trimmed libs
@@ -195,17 +316,34 @@ def filter_reads(outdir, fq1, fq2, minlen, maxlen, limit, minqual=10):
     out2 = open(fn2, "w")
     outfiles = (out1, out2, 0, 0)
     # run filtering
-    i, filtered, orphans = filter_paired(fastq, outfiles, minlen, maxlen, limit, minqual)
+    i, filtered, orphans = filter_paired(
+        fastq, outfiles, minlen, maxlen, limit, minqual
+    )
     out1.close()
     out2.close()
-    return fn1, fn2, i-filtered
-    
-def prepare_gapcloser(outdir, configFn, libFs, libRs, orientations,
-                      libIS, libISStDev, minlen, maxlen, limit, verbose, log): 
+    return fn1, fn2, i - filtered
+
+
+def prepare_gapcloser(
+    outdir,
+    configFn,
+    libFs,
+    libRs,
+    orientations,
+    libIS,
+    libISStDev,
+    minlen,
+    maxlen,
+    limit,
+    verbose,
+    log,
+):
     """Return SOAPdenovo2 config file needed by GapCloser."""
-    lines  = "[LIB]\navg_ins=%s\nreverse_seq=%s\nasm_flags=3\nrank=%s\npair_num_cutoff=5\nmap_len=35\nq1=%s\nq2=%s\n"
-    config = ["max_rd_len=%s"%maxlen]
-    for i, (fq1, fq2, orient, iSize, iFrac) in enumerate(zip(libFs, libRs, orientations, libIS, libISStDev), 1):
+    lines = "[LIB]\navg_ins=%s\nreverse_seq=%s\nasm_flags=3\nrank=%s\npair_num_cutoff=5\nmap_len=35\nq1=%s\nq2=%s\n"
+    config = ["max_rd_len=%s" % maxlen]
+    for i, (fq1, fq2, orient, iSize, iFrac) in enumerate(
+        zip(libFs, libRs, orientations, libIS, libISStDev), 1
+    ):
         # consider skipping mate-pairs is libIS>1kb
         # skip orientations other than FR RF
         if orient == "FR":
@@ -215,54 +353,100 @@ def prepare_gapcloser(outdir, configFn, libFs, libRs, orientations,
         else:
             if verbose:
                 info = "  Skipping unsupported library %s in: %s - %s!\n"
-                log.write(info%(orient, fq1, fq2))
+                log.write(info % (orient, fq1, fq2))
             continue
         # filter reads
         fn1, fn2, passed = filter_reads(outdir, fq1, fq2, minlen, maxlen, limit)
-        #store config info only if some reads
+        # store config info only if some reads
         if passed:
-            config.append(lines%(iSize, reverse_seq, i, fn1, fn2))
-        
+            config.append(lines % (iSize, reverse_seq, i, fn1, fn2))
+
     # store config only if some libs passed filtering
-    if len(config)>1:
+    if len(config) > 1:
         with open(configFn, "w") as out:
             out.write("\n".join(config))
         return True
-    
-def run_gapclosing(outdir, libraries, nogapsFname, scaffoldsFname,  threads, limit, iters, 
-                   resume, verbose, log, basename="_gapcloser", overlap=25, minReadLen=40):
+
+
+def run_gapclosing(
+    outdir,
+    libraries,
+    nogapsFname,
+    scaffoldsFname,
+    threads,
+    limit,
+    iters,
+    resume,
+    verbose,
+    log,
+    basename="_gapcloser",
+    overlap=25,
+    minReadLen=40,
+):
     """Execute gapclosing step."""
     pout = scaffoldsFname
     stop = 1
-    for i, (libnames, libFs, libRs, orientations, libIS, libISStDev, libreadlen) in enumerate(libraries, 1):
+    for i, (
+        libnames,
+        libFs,
+        libRs,
+        orientations,
+        libIS,
+        libISStDev,
+        libreadlen,
+    ) in enumerate(libraries, 1):
         # prepare config file and filter reads
-        configFn = os.path.join(outdir, "%s.%s.conf"%(basename, i))
+        configFn = os.path.join(outdir, "%s.%s.conf" % (basename, i))
         # skip if not suitable libraries
         maxReadLen = max(libreadlen)
-        if not prepare_gapcloser(outdir, configFn, libFs, libRs, orientations, libIS, libISStDev, \
-                                 minReadLen, maxReadLen, limit, verbose, log):
+        if not prepare_gapcloser(
+            outdir,
+            configFn,
+            libFs,
+            libRs,
+            orientations,
+            libIS,
+            libISStDev,
+            minReadLen,
+            maxReadLen,
+            limit,
+            verbose,
+            log,
+        ):
             continue
         # run iterations
-        for j in range(1, iters+1):
-            out = os.path.join(outdir, "%s.%s.%s.fa"%(basename, i, j))
+        for j in range(1, iters + 1):
+            out = os.path.join(outdir, "%s.%s.%s.fa" % (basename, i, j))
             # skip if file exists
-            if resume>1 or _corrupted_file(out):
+            if resume > 1 or _corrupted_file(out):
                 resume += 1
                 # run GapCloser
-                cmd = ["GapCloser", "-t %s"%threads, "-p %s"%overlap, "-l %s"%maxReadLen, \
-                       "-a", pout, "-b", configFn, "-o", out]
+                cmd = [
+                    "GapCloser",
+                    "-t %s" % threads,
+                    "-p %s" % overlap,
+                    "-l %s" % maxReadLen,
+                    "-a",
+                    pout,
+                    "-b",
+                    configFn,
+                    "-o",
+                    out,
+                ]
                 if verbose:
-                    log.write(" iteration %s.%s: %s"%(i, j, FastaIndex(pout).stats()))
+                    log.write(" iteration %s.%s: %s" % (i, j, FastaIndex(pout).stats()))
                 # run GapCloser and save stdout/err to log file
-                with open(out+".log", "w") as gapcloselog:
-                    GapCloser = subprocess.Popen(cmd, stdout=gapcloselog, stderr=gapcloselog)
+                with open(out + ".log", "w") as gapcloselog:
+                    GapCloser = subprocess.Popen(
+                        cmd, stdout=gapcloselog, stderr=gapcloselog
+                    )
                     GapCloser.wait()
             # store out info
             pout = out
             # skip if number of gaps smaller than 0.1%
-            stats     = FastaIndex(pout).stats()
-            fastaSize = int(stats.split('\t')[2])
-            gapSize   = int(stats.split('\t')[-2])
+            stats = FastaIndex(pout).stats()
+            fastaSize = int(stats.split("\t")[2])
+            gapSize = int(stats.split("\t")[-2])
             if 1.0 * gapSize / fastaSize < 0.001:
                 stop = 1
                 break
@@ -270,96 +454,176 @@ def run_gapclosing(outdir, libraries, nogapsFname, scaffoldsFname,  threads, lim
             break
     # create symlink to final scaffolds or pout
     symlink(os.path.basename(pout), nogapsFname)
-    symlink(os.path.basename(pout+".fai"), nogapsFname+".fai")
+    symlink(os.path.basename(pout + ".fai"), nogapsFname + ".fai")
     return resume
+
 
 def _corrupted_file(fname):
     """Return True if output file doesn't exists or is corrupted."""
-    if not os.path.isfile(fname) or not os.path.getsize(fname) or \
-       not os.path.isfile(fname+".fai") or not os.path.getsize(fname+".fai"):
+    if (
+        not os.path.isfile(fname)
+        or not os.path.getsize(fname)
+        or not os.path.isfile(fname + ".fai")
+        or not os.path.getsize(fname + ".fai")
+    ):
         return True
+
 
 def _check_fasta(lastOutFn, minSize=1000, log=sys.stderr):
     """Exit if empty FastA file"""
     faidx = FastaIndex(open(lastOutFn))
-    if not len(faidx) or faidx.genomeSize<minSize:
-        log.write("[ERROR] Empty FastA file encountered: %s !\n"%lastOutFn)
+    if not len(faidx) or faidx.genomeSize < minSize:
+        log.write("[ERROR] Empty FastA file encountered: %s !\n" % lastOutFn)
         sys.exit(1)
 
-        
-def redundans(fastq, longreads, fasta, reference, outdir, mapq, 
-              threads, mem, resume, identity, overlap, minLength, \
-              joins, linkratio, readLimit, iters, sspacebin, refpreset, \
-              reduction=1, scaffolding=1, gapclosing=1, usemerqury=1, kmer=21, cleaning=1, \
-              norearrangements=0, verbose=1, usebwa=0, minimap2reduce=0, index="4G", useminimap2=0, populateScaffolds=0, log=sys.stderr, tmp="/tmp"):
+
+def redundans(
+    fastq,
+    longreads,
+    fasta,
+    reference,
+    outdir,
+    mapq,
+    threads,
+    mem,
+    resume,
+    identity,
+    overlap,
+    minLength,
+    joins,
+    linkratio,
+    readLimit,
+    iters,
+    sspacebin,
+    refpreset,
+    reduction=1,
+    scaffolding=1,
+    gapclosing=1,
+    usemerqury=1,
+    kmer=21,
+    cleaning=1,
+    norearrangements=0,
+    verbose=1,
+    usebwa=0,
+    minimap2reduce=0,
+    index="4G",
+    useminimap2=0,
+    populateScaffolds=0,
+    log=sys.stderr,
+    tmp="/tmp",
+):
     """Launch redundans pipeline."""
     # check resume
     orgresume = resume
     if resume:
-        log.write("%sResuming previous run from %s...\n"%(timestamp(), outdir))
+        log.write("%sResuming previous run from %s...\n" % (timestamp(), outdir))
         if not os.path.isdir(outdir):
-            log.write("No such directory: %s!\n"%outdir)
+            log.write("No such directory: %s!\n" % outdir)
             sys.exit(1)
     # prepare outdir or quit if exists
     elif os.path.isdir(outdir):
-        log.write("Directory %s exists!\n"%outdir)
+        log.write("Directory %s exists!\n" % outdir)
         sys.exit(1)
     else:
         os.makedirs(outdir)
 
-    #return True
+    # return True
 
     # DE NOVO CONTIGS
-    lastOutFn = os.path.join(outdir, "contigs.fa") 
+    lastOutFn = os.path.join(outdir, "contigs.fa")
     if not fasta and _corrupted_file(lastOutFn):
         resume += 1
         if verbose:
-            log.write("%sDe novo assembly...\n"%timestamp())        
-        fasta = denovo(os.path.join(outdir, "denovo"), fastq, threads, mem, verbose, log, tmp)
+            log.write("%sDe novo assembly...\n" % timestamp())
+        fasta = denovo(
+            os.path.join(outdir, "denovo"), fastq, threads, mem, verbose, log, tmp
+        )
     elif not fasta:
         fasta = lastOutFn
-        
+
     # REDUCTION
-    fastas = [fasta, ]; _check_fasta(fasta)
+    fastas = [
+        fasta,
+    ]
+    _check_fasta(fasta)
     symlink(fasta, lastOutFn)
-    fastas.append(lastOutFn); _check_fasta(lastOutFn)
+    fastas.append(lastOutFn)
+    _check_fasta(lastOutFn)
     # update fasta list
     outfn_check = os.path.join(outdir, "contigs.reduced.fa")
     if reduction and _corrupted_file(outfn_check):
         outfn = os.path.join(outdir, "contigs.reduced.fa")
         resume += 1
         if verbose:
-            log.write("%sReduction...\n"%timestamp())
-            log.write("#file name\tgenome size\tcontigs\theterozygous size\t[%]\theterozygous contigs\t[%]\tidentity [%]\tpossible joins\thomozygous size\t[%]\thomozygous contigs\t[%]\n")
+            log.write("%sReduction...\n" % timestamp())
+            log.write(
+                "#file name\tgenome size\tcontigs\theterozygous size\t[%]\theterozygous contigs\t[%]\tidentity [%]\tpossible joins\thomozygous size\t[%]\thomozygous contigs\t[%]\n"
+            )
         with open(outfn, "w") as out:
-            info = fasta2homozygous(out, open(fastas[-1]), identity, overlap, minLength, threads, verbose=0, useminimap2=minimap2reduce, preset=refpreset, log=log)
+            info = fasta2homozygous(
+                out,
+                open(fastas[-1]),
+                identity,
+                overlap,
+                minLength,
+                threads,
+                verbose=0,
+                useminimap2=minimap2reduce,
+                preset=refpreset,
+                log=log,
+            )
         # update fasta list
         lastOutFn = outfn
-        fastas.append(lastOutFn); _check_fasta(lastOutFn)
+        fastas.append(lastOutFn)
+        _check_fasta(lastOutFn)
         generate_gfa_file(lastOutFn, threads)
-
 
     # get read limit & libraries
     if fastq:
         if verbose:
-            log.write("%sEstimating parameters of libraries...\n"%timestamp())
-        limit     = get_read_limit(lastOutFn, readLimit, verbose, log)
-        libraries = get_libraries(fastq, lastOutFn, mapq, threads, verbose, log, usebwa=usebwa)
-    
+            log.write("%sEstimating parameters of libraries...\n" % timestamp())
+        limit = get_read_limit(lastOutFn, readLimit, verbose, log)
+        libraries = get_libraries(
+            fastq, lastOutFn, mapq, threads, verbose, log, usebwa=usebwa
+        )
+
     # SCAFFOLDING
-    if fastq and scaffolding: 
+    if fastq and scaffolding:
         outfn = os.path.join(outdir, "scaffolds.fa")
         if verbose:
-            log.write("%sScaffolding...\n"%timestamp())
-        libraries, resume = run_scaffolding(outdir, outfn, fastq, libraries, lastOutFn, mapq, threads, joins, \
-                                            linkratio, limit, iters, sspacebin, gapclosing, verbose, usebwa, log, \
-                                            identity, overlap, minLength, resume)
+            log.write("%sScaffolding...\n" % timestamp())
+        libraries, resume = run_scaffolding(
+            outdir,
+            outfn,
+            fastq,
+            libraries,
+            lastOutFn,
+            mapq,
+            threads,
+            joins,
+            linkratio,
+            limit,
+            iters,
+            sspacebin,
+            gapclosing,
+            verbose,
+            usebwa,
+            log,
+            identity,
+            overlap,
+            minLength,
+            resume,
+        )
         # update fasta list
-        fastas += [x for x in sorted(glob.glob(os.path.join(outdir, "_sspace.*.fa"))) if "_gapcloser" not in x]
+        fastas += [
+            x
+            for x in sorted(glob.glob(os.path.join(outdir, "_sspace.*.fa")))
+            if "_gapcloser" not in x
+        ]
         lastOutFn = outfn
-        fastas.append(lastOutFn); _check_fasta(lastOutFn)
+        fastas.append(lastOutFn)
+        _check_fasta(lastOutFn)
         generate_gfa_file(lastOutFn, threads)
-
 
     # SCAFFOLDING WITH LONG READS
     outfn_check = os.path.join(outdir, "scaffolds.longreads.fa")
@@ -368,56 +632,106 @@ def redundans(fastq, longreads, fasta, reference, outdir, mapq,
         # here maybe sort reads by increasing median read length
         resume += 1
         if verbose and populateScaffolds:
-            log.write("%sUsing populateScaffolds mode for long read scaffolding mode...\n"%timestamp())
+            log.write(
+                "%sUsing populateScaffolds mode for long read scaffolding mode...\n"
+                % timestamp()
+            )
         elif verbose and not populateScaffolds:
-            log.write("%sUsing long reads to generate an assembly to use as a reference for scaffolding...\n"%timestamp())
+            log.write(
+                "%sUsing long reads to generate an assembly to use as a reference for scaffolding...\n"
+                % timestamp()
+            )
         poutfn = lastOutFn
         for i, fname in enumerate(longreads, 1):
             if verbose:
-                log.write(" iteration %s...\n"%i)
-            
-            #Add a check to change preset based on filename if provided a list of files:
-            
-            if re.search("ont", fname, flags=re.IGNORECASE) or re.search("nanopore", fname, flags=re.IGNORECASE) or re.search("oxford", fname, flags=re.IGNORECASE):
+                log.write(" iteration %s...\n" % i)
+
+            # Add a check to change preset based on filename if provided a list of files:
+
+            if (
+                re.search("ont", fname, flags=re.IGNORECASE)
+                or re.search("nanopore", fname, flags=re.IGNORECASE)
+                or re.search("oxford", fname, flags=re.IGNORECASE)
+            ):
                 preset = "ava-ont"
                 if populateScaffolds:
                     preset = "map-ont"
-            elif re.search("pb", fname, flags=re.IGNORECASE) or re.search("pacbio", fname, flags=re.IGNORECASE) or re.search("smrt", fname, flags=re.IGNORECASE):
+            elif (
+                re.search("pb", fname, flags=re.IGNORECASE)
+                or re.search("pacbio", fname, flags=re.IGNORECASE)
+                or re.search("smrt", fname, flags=re.IGNORECASE)
+            ):
                 preset = "ava-pb"
                 if populateScaffolds:
                     preset = "map-pb"
-            elif re.search("hifi", fname, flags=re.IGNORECASE) or re.search("hi_fi", fname, flags=re.IGNORECASE) or re.search("hi-fi", fname, flags=re.IGNORECASE):
+            elif (
+                re.search("hifi", fname, flags=re.IGNORECASE)
+                or re.search("hi_fi", fname, flags=re.IGNORECASE)
+                or re.search("hi-fi", fname, flags=re.IGNORECASE)
+            ):
                 preset = "ava-pb"
                 if populateScaffolds:
                     preset = "map-hifi"
             else:
-                #Added this to default to ONT
+                # Added this to default to ONT
                 preset = "ava-ont"
                 if populateScaffolds:
                     preset = "map-ont"
 
             if populateScaffolds:
                 if useminimap2 and verbose:
-                    log.write("Using minimap2 aligner preset %s for file %s...\n"%(preset, fname))
+                    log.write(
+                        "Using minimap2 aligner preset %s for file %s...\n"
+                        % (preset, fname)
+                    )
                 elif verbose:
-                    log.write("Using LAST aligner for file %s...\n"%fname)
+                    log.write("Using LAST aligner for file %s...\n" % fname)
             else:
                 if useminimap2 and verbose:
-                    log.write("Using minimap2 as an aligner and overlap preset %s...\n"%preset)
+                    log.write(
+                        "Using minimap2 as an aligner and overlap preset %s...\n"
+                        % preset
+                    )
                 elif verbose:
-                    log.write("Using LAST as an aligner...\n")   
+                    log.write("Using LAST as an aligner...\n")
 
-
-            #If populateScaffolds mode wants to be run: scaffolding based on long read mapping
+            # If populateScaffolds mode wants to be run: scaffolding based on long read mapping
             if populateScaffolds:
-                s = LongReadGraph(lastOutFn, fname, identity, overlap, preset=preset, index=index, useminimap2=useminimap2, maxgap=0, threads=threads, \
-                        dotplot="", norearrangements=norearrangements, log=0)
-            #Else use long reads to generate an assembly that can be used for reference-based scaffolding
+                s = LongReadGraph(
+                    lastOutFn,
+                    fname,
+                    identity,
+                    overlap,
+                    preset=preset,
+                    index=index,
+                    useminimap2=useminimap2,
+                    maxgap=0,
+                    threads=threads,
+                    dotplot="",
+                    norearrangements=norearrangements,
+                    log=0,
+                )
+            # Else use long reads to generate an assembly that can be used for reference-based scaffolding
             else:
-                s = SyntenyGraph(lastOutFn, reference, identity=0.51, overlap=0.66, maxgap=0, threads=threads, \
-                         dotplot="", norearrangements=norearrangements, index=index, useminimap2=useminimap2, preset=refpreset, log=0, uselongreads=longreads, preset_long=preset, fastq=fname)
-  
-            _outfn = os.path.join(outdir, "scaffolds.longreads.%s.fa"%i)
+                s = SyntenyGraph(
+                    lastOutFn,
+                    reference,
+                    identity=0.51,
+                    overlap=0.66,
+                    maxgap=0,
+                    threads=threads,
+                    dotplot="",
+                    norearrangements=norearrangements,
+                    index=index,
+                    useminimap2=useminimap2,
+                    preset=refpreset,
+                    log=0,
+                    uselongreads=longreads,
+                    preset_long=preset,
+                    fastq=fname,
+                )
+
+            _outfn = os.path.join(outdir, "scaffolds.longreads.%s.fa" % i)
             with open(_outfn, "w") as out:
                 s.save(out)
             # store fname
@@ -427,7 +741,8 @@ def redundans(fastq, longreads, fasta, reference, outdir, mapq,
         symlink(poutfn, outfn)
         # update fasta list
         lastOutFn = outfn
-        fastas.append(lastOutFn); _check_fasta(lastOutFn)
+        fastas.append(lastOutFn)
+        _check_fasta(lastOutFn)
         generate_gfa_file(lastOutFn, threads)
 
     # REFERENCE-BASED SCAFFOLDING
@@ -436,32 +751,59 @@ def redundans(fastq, longreads, fasta, reference, outdir, mapq,
         outfn = os.path.join(outdir, "scaffolds.ref.fa")
         resume += 1
         if useminimap2 and verbose:
-            log.write("%sScaffolding based on reference using minimap2 and preset %s...\n"%(timestamp(), refpreset))
+            log.write(
+                "%sScaffolding based on reference using minimap2 and preset %s...\n"
+                % (timestamp(), refpreset)
+            )
         elif verbose:
-            log.write("%sScaffolding based on reference using LAST...\n"%timestamp())        
-        s = SyntenyGraph(lastOutFn, reference, identity=0.51, overlap=0.66, maxgap=0, threads=threads, \
-                         dotplot="", norearrangements=norearrangements, index=index, useminimap2=useminimap2, preset=refpreset, log=0, uselongreads=0)
+            log.write("%sScaffolding based on reference using LAST...\n" % timestamp())
+        s = SyntenyGraph(
+            lastOutFn,
+            reference,
+            identity=0.51,
+            overlap=0.66,
+            maxgap=0,
+            threads=threads,
+            dotplot="",
+            norearrangements=norearrangements,
+            index=index,
+            useminimap2=useminimap2,
+            preset=refpreset,
+            log=0,
+            uselongreads=0,
+        )
         # save output
         with open(outfn, "w") as out:
             s.save(out)
         # update fasta list
         lastOutFn = outfn
-        fastas.append(lastOutFn); _check_fasta(lastOutFn)
+        fastas.append(lastOutFn)
+        _check_fasta(lastOutFn)
         generate_gfa_file(lastOutFn, threads)
 
-    
-        
     # GAP CLOSING
     outfn_check = os.path.join(outdir, "scaffolds.filled.fa")
     if fastq and gapclosing:
         outfn = os.path.join(outdir, "scaffolds.filled.fa")
-        if verbose: 
-            log.write("%sGap closing...\n"%timestamp())
-        resume = run_gapclosing(outdir, libraries, outfn, lastOutFn, threads, limit, iters, resume, verbose, log)
+        if verbose:
+            log.write("%sGap closing...\n" % timestamp())
+        resume = run_gapclosing(
+            outdir,
+            libraries,
+            outfn,
+            lastOutFn,
+            threads,
+            limit,
+            iters,
+            resume,
+            verbose,
+            log,
+        )
         # update fasta list
         fastas += sorted(glob.glob(os.path.join(outdir, "_gap*.fa")))
         lastOutFn = outfn
-        fastas.append(lastOutFn); _check_fasta(lastOutFn)
+        fastas.append(lastOutFn)
+        _check_fasta(lastOutFn)
         generate_gfa_file(lastOutFn, threads)
 
     # FINAL REDUCTION
@@ -470,14 +812,28 @@ def redundans(fastq, longreads, fasta, reference, outdir, mapq,
         outfn = os.path.join(outdir, "scaffolds.reduced.fa")
         resume += 1
         if verbose:
-            log.write("%sFinal reduction...\n"%timestamp())
-            log.write("#file name\tgenome size\tcontigs\theterozygous size\t[%]\theterozygous contigs\t[%]\tidentity [%]\tpossible joins\thomozygous size\t[%]\thomozygous contigs\t[%]\n")
+            log.write("%sFinal reduction...\n" % timestamp())
+            log.write(
+                "#file name\tgenome size\tcontigs\theterozygous size\t[%]\theterozygous contigs\t[%]\tidentity [%]\tpossible joins\thomozygous size\t[%]\thomozygous contigs\t[%]\n"
+            )
         # reduce
         with open(outfn, "w") as out:
-            info = fasta2homozygous(out, open(lastOutFn), identity, overlap,  minLength, threads, verbose=0, useminimap2=minimap2reduce, preset=refpreset, log=log)
+            info = fasta2homozygous(
+                out,
+                open(lastOutFn),
+                identity,
+                overlap,
+                minLength,
+                threads,
+                verbose=0,
+                useminimap2=minimap2reduce,
+                preset=refpreset,
+                log=log,
+            )
         # update fasta list
         lastOutFn = outfn
-        fastas.append(lastOutFn); _check_fasta(lastOutFn, threads)
+        fastas.append(lastOutFn)
+        _check_fasta(lastOutFn, threads)
         generate_gfa_file(lastOutFn, threads)
 
     # MERQURY ANALYSIS
@@ -486,47 +842,66 @@ def redundans(fastq, longreads, fasta, reference, outdir, mapq,
 
         # MERYL DB
         if verbose:
-            log.write("\n%sGenerating a complete Meryl database for your samples...\n"%(timestamp()))
+            log.write(
+                "\n%sGenerating a complete Meryl database for your samples...\n"
+                % (timestamp())
+            )
         meryldb = _build_meryldb(outdir, fastq, threads, mem, kmer)
 
         if verbose:
-            log.write("%sGenerating Merqury statistics...\n"%timestamp())
+            log.write("%sGenerating Merqury statistics...\n" % timestamp())
         merqury_statistics(outdir, meryldb, lastOutFn, threads, mem, kmer, verbose)
-        
+
     # FASTA STATS
     if verbose:
-        log.write("%sReporting statistics...\n"%timestamp())
+        log.write("%sReporting statistics...\n" % timestamp())
     # report stats
-    log.write('#fname\tcontigs\tbases\tGC [%]\tcontigs >1kb\tbases in contigs >1kb\tN50\tN90\tNs\tlongest\n')
+    log.write(
+        "#fname\tcontigs\tbases\tGC [%]\tcontigs >1kb\tbases in contigs >1kb\tN50\tN90\tNs\tlongest\n"
+    )
     for fn in fastas:
         log.write(FastaIndex(fn).stats())
-    
+
     # Clean-up
     if cleaning:
         if verbose:
-            log.write("%sCleaning-up...\n"%timestamp())
+            log.write("%sCleaning-up...\n" % timestamp())
         clean_up(outdir, log, verbose)
 
     if orgresume:
-        log.write("%sResume report: %s step(s) have been recalculated.\n"%(timestamp(), resume-1))
-    
+        log.write(
+            "%sResume report: %s step(s) have been recalculated.\n"
+            % (timestamp(), resume - 1)
+        )
+
 
 def clean_up(directory, log, verbose=False):
     """
     Cleans up by deleting all non-essential files and empty directories.
     """
-    #If you want to keep meryl data, add '.merylData', '.merylIndex', 'merylIndex'
-    endings = ('.fa', '.fasta', '.fai', '.tsv', '.qv', '.stats', '.png', '.log', '.hist', '.gfa')
-    
+    # If you want to keep meryl data, add '.merylData', '.merylIndex', 'merylIndex'
+    endings = (
+        ".fa",
+        ".fasta",
+        ".fai",
+        ".tsv",
+        ".qv",
+        ".stats",
+        ".png",
+        ".log",
+        ".hist",
+        ".gfa",
+    )
+
     for root, dirs, fnames in os.walk(directory):
         for i, fn in enumerate([x for x in fnames if not x.endswith(endings)], 1):
             os.unlink(os.path.join(root, fn))
-        
+
         for item in dirs:
             full_path = os.path.join(root, item)
             if os.path.isdir(full_path):
-                #If you want to check meryl data, comment the loop below
-                if item.endswith('.meryl'):
+                # If you want to check meryl data, comment the loop below
+                if item.endswith(".meryl"):
                     # if it's a meryl directory, delete all files in it before removing the directory
                     for file in os.listdir(full_path):
                         file_path = os.path.join(full_path, file)
@@ -534,62 +909,77 @@ def clean_up(directory, log, verbose=False):
                             if os.path.isfile(file_path):
                                 os.unlink(file_path)
                         except Exception as e:
-                            log.write("Failed to delete %s. Reason: %s"%(file_path, e))
-                    
+                            log.write(
+                                "Failed to delete %s. Reason: %s" % (file_path, e)
+                            )
+
                     # now remove the directory itself
                     try:
                         os.rmdir(full_path)
                     except Exception as e:
-                        log.write("Failed to delete %s. Reason: %s"%(file_path, e))
-                
-    if verbose:
-        log.write("Finished cleaning up %s"%directory)
+                        log.write("Failed to delete %s. Reason: %s" % (file_path, e))
 
+    if verbose:
+        log.write("Finished cleaning up %s" % directory)
 
 
 def check_dependency(dependency):
 
     for cmd, version in list(dependency.items()):
         try:
-            out = subprocess.check_output(['which', cmd])
-            path = out.decode('utf-8').strip()
-            #If required for locating paths
-            #if path:
-                #print(f"{cmd} found at {path}")
-            #else:
-                #print(f"{cmd} not found in PATH")
+            out = subprocess.check_output(["which", cmd])
+            path = out.decode("utf-8").strip()
+            # If required for locating paths
+            # if path:
+            # print(f"{cmd} found at {path}")
+            # else:
+            # print(f"{cmd} not found in PATH")
 
             if version:
                 if cmd == "miniasm":
-                    p = subprocess.Popen([cmd, '-V'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    p = subprocess.Popen(
+                        [cmd, "-V"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                    )
                     out = "".join(p.stdout.readlines()[0].decode("utf-8"))
                     ver, _ = out.split("-", 1)
                     curver = ("".join(ver.split(".", 2))).rstrip()
                 elif cmd == "minimap2":
-                    p = subprocess.Popen([cmd, '-V'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    p = subprocess.Popen(
+                        [cmd, "-V"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                    )
                     out = "".join(p.stdout.readlines()[0].decode("utf-8"))
                     ver, _ = out.split("-", 1)
                     curver = ("".join(ver.split(".", 2))).rstrip()
                 elif cmd == "k8-Linux":
-                    p = subprocess.Popen([cmd, '-v'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    _= p.stdout.readline().decode("utf-8")
+                    p = subprocess.Popen(
+                        [cmd, "-v"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                    )
+                    _ = p.stdout.readline().decode("utf-8")
                     out = p.stdout.readline().decode("utf-8")
                     _, strver = out.split(" ", 1)
                     ver, _ = strver.split("-", 1)
                     curver = ("".join(ver.split(".", 2))).rstrip()
                 elif cmd == "R":
-                    p = subprocess.Popen([cmd, '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    p = subprocess.Popen(
+                        [cmd, "--version"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
                     out = p.stdout.readline().decode("utf-8")
                     _, _, ver, _ = out.split(" ", 3)
                     curver = ("".join(ver.split(".", 2))).rstrip()
                 elif cmd == "snap-aligner":
-                    p = subprocess.Popen([cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    #Notice that snap-aligner defaults to stderr
+                    p = subprocess.Popen(
+                        [cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                    )
+                    # Notice that snap-aligner defaults to stderr
                     out = p.stderr.readline().decode("utf-8")
                     _, _, _, _, ver = out.split(" ", 4)
                     curver = ("".join(ver.split(".", 3))).rstrip()
                 elif cmd == "bwa":
-                    p = subprocess.Popen([cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    p = subprocess.Popen(
+                        [cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                    )
                     _ = p.stderr.readline().decode("utf-8")
                     _ = p.stderr.readline().decode("utf-8")
                     out = p.stderr.readline().decode("utf-8")
@@ -597,135 +987,315 @@ def check_dependency(dependency):
                     ver, _ = strver.split("-", 1)
                     curver = ("".join(ver.split(".", 2))).rstrip()
                 elif cmd == "meryl":
-                    p = subprocess.Popen([cmd, '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    #Note that meryl defaults to stderr
+                    p = subprocess.Popen(
+                        [cmd, "--version"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                    # Note that meryl defaults to stderr
                     out = p.stderr.readline().decode("utf-8")
                     _, ver = out.split(" ", 1)
                     curver = ("".join(ver.split(".", 1))).rstrip()
-                elif cmd =="gfastats":
-                    p = subprocess.Popen([cmd, '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                elif cmd == "gfastats":
+                    p = subprocess.Popen(
+                        [cmd, "--version"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
                     out = p.stdout.readline().decode("utf-8")
                     _, ver = out.split(" ", 1)
                     ver = re.sub("v", "", ver)
                     curver = ("".join(ver.split(".", 2))).rstrip()
                 else:
-                    p = subprocess.Popen([cmd, '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    p = subprocess.Popen(
+                        [cmd, "--version"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
                     out = "".join(p.stdout.readlines()[0].decode("utf-8"))
                     curver = out.split()[-1].rstrip()
             if not curver.isdigit():
-                sys.stderr.write("[WARNING] Problem checking %s version: %s. Proceed with care.\n"%(cmd, out))
-            elif int(curver)<version:
+                sys.stderr.write(
+                    "[WARNING] Problem checking %s version: %s. Proceed with care.\n"
+                    % (cmd, out)
+                )
+            elif int(curver) < version:
                 info = "[WARNING] Old version of %s: %s. Update to version %s+!\n"
-                sys.stderr.write(info%(cmd, curver, version))
+                sys.stderr.write(info % (cmd, curver, version))
         except subprocess.CalledProcessError:
-            sys.stderr.write("[ERROR] CalledProcessError while checking %s. Is it correctly installed?\nMake sure you have installed all necessary dependencies from https://github.com/Gabaldonlab/redundans#manual-installation !\n[INFO] R dependencies can be ignored by ignoring --runmerqury option\n"%cmd)
+            sys.stderr.write(
+                "[ERROR] CalledProcessError while checking %s. Is it correctly installed?\nMake sure you have installed all necessary dependencies from https://github.com/Gabaldonlab/redundans#manual-installation !\n[INFO] R dependencies can be ignored by ignoring --runmerqury option\n"
+                % cmd
+            )
             sys.exit(-1)
+
 
 def main():
     import argparse
-    usage   = "%(prog)s -v"
-    parser  = argparse.ArgumentParser(description=desc, epilog=epilog, formatter_class=argparse.RawTextHelpFormatter)
-  
-    parser.add_argument("-v", "--verbose",  action="store_true", help="verbose")    
-    parser.add_argument('--version', action='version', version='2.0.1')
-    parser.add_argument("-i", "--fastq", nargs="*", default=[], help="FASTQ PE / MP files")
-    parser.add_argument("-f", "--fasta", default="", help="FASTA file with contigs / scaffolds")
-    parser.add_argument("-o", "--outdir", default="redundans", help="output directory [%(default)s]")
-    parser.add_argument("-t", "--threads", default=16, type=int, help="max threads to run [%(default)s]")
-    parser.add_argument("--resume",  default=False, action="store_true", help="resume previous run")
-    parser.add_argument("--log", default=sys.stderr, type=argparse.FileType('w'), help="output log to [stderr]")
-    parser.add_argument('--nocleaning', action='store_false', help="keep intermediate files")
-    
-    denovo = parser.add_argument_group('De novo assembly options')
-    denovo.add_argument("-m", "--mem", default=2, type=int, help="max memory to allocate (in GB) [%(default)s]")
-    denovo.add_argument("--tmp", default='/tmp', help="tmp directory [%(default)s]")
-    
-    redu = parser.add_argument_group('Reduction options')
-    redu.add_argument("--identity", default=0.51, type=float, help="min. identity [%(default)s]")
-    redu.add_argument("--overlap", default=0.80, type=float, help="min. overlap [%(default)s]")
-    redu.add_argument("--minLength", default=200, type=int, help="min. contig length [%(default)s]")
-    redu.add_argument("--minimap2reduce", action='store_true', help="Use minimap2 for the initial and final Reduction step. Recommended for input assembled contigs from long reads using --preset[asm5] by default. By default LASTal is used for Reduction.")
-    redu.add_argument('-x', "--index", default="4G", type=str, help="Minimap2 parameter -I used to load at most INDEX target bases into RAM for indexing [%(default)s]. It has to be provided as a string INDEX ending with k/K/m/M/g/G.")
-    redu.add_argument('--noreduction', action='store_false', help="Skip reduction")
-    
-    scaf = parser.add_argument_group('Short-read scaffolding options')
-    scaf.add_argument("-j", "--joins", default=5, type=int, help="min pairs to join contigs [%(default)s]")
-    scaf.add_argument("-a", "--linkratio", default=0.7, type=float,
-                      help="max link ratio between two best contig pairs [%(default)s]")    
-    scaf.add_argument("--limit", default=0.2, type=float, help="align subset of reads [%(default)s]")
-    scaf.add_argument("-q", "--mapq", default=10, type=int, help="min mapping quality [%(default)s]")
-    scaf.add_argument("--iters", default=2, type=int, help="iterations per library [%(default)s]")
-    scaf.add_argument('--noscaffolding', action='store_false', help="Skip short-read scaffolding")
-    scaf.add_argument("-b", "--usebwa", action='store_true', help="use bwa mem for alignment [use snap-aligner]")
-     
-    longscaf = parser.add_argument_group('Long-read scaffolding options')
-    longscaf.add_argument("-l", "--longreads", nargs="*", default=[], help="FastQ/FastA files with long reads. By default LAST")
-    longscaf.add_argument("-s", "--populateScaffolds",action='store_true', help="Run populateScaffolds mode for long read scaffolding, else generate an assembly for reference-based scaffolding. Not recommended for highly repetitive genomes. Default False.")
-    longscaf.add_argument("--minimap2scaffold", action='store_true', help="Use Minimap2 for aligning long reads. If used alongside the populateScaffolds mode, the preset usage dependant on file name convention (case insensitive): ont, nanopore, pb, pacbio, hifi, hi_fi, hi-fi. ie: s324_nanopore.fq.gz.")
-    
-    refscaf = parser.add_argument_group('Reference-based scaffolding options')
-    refscaf.add_argument("-r", "--reference", default='', help="reference FastA file")
-    refscaf.add_argument("--norearrangements", default=False, action='store_true', 
-                         help="high identity mode (rearrangements not allowed)")
-    refscaf.add_argument("-p", "--preset", default='asm5', help="Preset option for Minimap2-based Reduction and/or Reference-based scaffolding. Possible options: asm5 (5 percent sequence divergence), asm10 (10 percent sequence divergence) and asm20(20 percent sequence divergence). Default [%(default)s]")
-    
-    gaps = parser.add_argument_group('Gap closing options')
-    gaps.add_argument('--nogapclosing',  action='store_false', default=True)
 
-    stats = parser.add_argument_group('Meryl and Merqury options')
-    stats.add_argument('--runmerqury',  action='store_true', default=False, help="Run meryldb and merqury for assembly kmer multiplicity stats.")
-    stats.add_argument('-k', "--kmer",  default=21, type=int, help="K-mer size for meryl [%(default)s]")    
-        
+    usage = "%(prog)s -v"
+    parser = argparse.ArgumentParser(
+        description=desc, epilog=epilog, formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    parser.add_argument("-v", "--verbose", action="store_true", help="verbose")
+    parser.add_argument("--version", action="version", version="2.0.1")
+    parser.add_argument(
+        "-i", "--fastq", nargs="*", default=[], help="FASTQ PE / MP files"
+    )
+    parser.add_argument(
+        "-f", "--fasta", default="", help="FASTA file with contigs / scaffolds"
+    )
+    parser.add_argument(
+        "-o", "--outdir", default="redundans", help="output directory [%(default)s]"
+    )
+    parser.add_argument(
+        "-t", "--threads", default=16, type=int, help="max threads to run [%(default)s]"
+    )
+    parser.add_argument(
+        "--resume", default=False, action="store_true", help="resume previous run"
+    )
+    parser.add_argument(
+        "--log",
+        default=sys.stderr,
+        type=argparse.FileType("w"),
+        help="output log to [stderr]",
+    )
+    parser.add_argument(
+        "--nocleaning", action="store_false", help="keep intermediate files"
+    )
+
+    denovo = parser.add_argument_group("De novo assembly options")
+    denovo.add_argument(
+        "-m",
+        "--mem",
+        default=2,
+        type=int,
+        help="max memory to allocate (in GB) [%(default)s]",
+    )
+    denovo.add_argument("--tmp", default="/tmp", help="tmp directory [%(default)s]")
+
+    redu = parser.add_argument_group("Reduction options")
+    redu.add_argument(
+        "--identity", default=0.51, type=float, help="min. identity [%(default)s]"
+    )
+    redu.add_argument(
+        "--overlap", default=0.80, type=float, help="min. overlap [%(default)s]"
+    )
+    redu.add_argument(
+        "--minLength", default=200, type=int, help="min. contig length [%(default)s]"
+    )
+    redu.add_argument(
+        "--minimap2reduce",
+        action="store_true",
+        help="Use minimap2 for the initial and final Reduction step. Recommended for input assembled contigs from long reads using --preset[asm5] by default. By default LASTal is used for Reduction.",
+    )
+    redu.add_argument(
+        "-x",
+        "--index",
+        default="4G",
+        type=str,
+        help="Minimap2 parameter -I used to load at most INDEX target bases into RAM for indexing [%(default)s]. It has to be provided as a string INDEX ending with k/K/m/M/g/G.",
+    )
+    redu.add_argument("--noreduction", action="store_false", help="Skip reduction")
+
+    scaf = parser.add_argument_group("Short-read scaffolding options")
+    scaf.add_argument(
+        "-j",
+        "--joins",
+        default=5,
+        type=int,
+        help="min pairs to join contigs [%(default)s]",
+    )
+    scaf.add_argument(
+        "-a",
+        "--linkratio",
+        default=0.7,
+        type=float,
+        help="max link ratio between two best contig pairs [%(default)s]",
+    )
+    scaf.add_argument(
+        "--limit", default=0.2, type=float, help="align subset of reads [%(default)s]"
+    )
+    scaf.add_argument(
+        "-q", "--mapq", default=10, type=int, help="min mapping quality [%(default)s]"
+    )
+    scaf.add_argument(
+        "--iters", default=2, type=int, help="iterations per library [%(default)s]"
+    )
+    scaf.add_argument(
+        "--noscaffolding", action="store_false", help="Skip short-read scaffolding"
+    )
+    scaf.add_argument(
+        "-b",
+        "--usebwa",
+        action="store_true",
+        help="use bwa mem for alignment [use snap-aligner]",
+    )
+
+    longscaf = parser.add_argument_group("Long-read scaffolding options")
+    longscaf.add_argument(
+        "-l",
+        "--longreads",
+        nargs="*",
+        default=[],
+        help="FastQ/FastA files with long reads. By default LAST",
+    )
+    longscaf.add_argument(
+        "-s",
+        "--populateScaffolds",
+        action="store_true",
+        help="Run populateScaffolds mode for long read scaffolding, else generate an assembly for reference-based scaffolding. Not recommended for highly repetitive genomes. Default False.",
+    )
+    longscaf.add_argument(
+        "--minimap2scaffold",
+        action="store_true",
+        help="Use Minimap2 for aligning long reads. If used alongside the populateScaffolds mode, the preset usage dependant on file name convention (case insensitive): ont, nanopore, pb, pacbio, hifi, hi_fi, hi-fi. ie: s324_nanopore.fq.gz.",
+    )
+
+    refscaf = parser.add_argument_group("Reference-based scaffolding options")
+    refscaf.add_argument("-r", "--reference", default="", help="reference FastA file")
+    refscaf.add_argument(
+        "--norearrangements",
+        default=False,
+        action="store_true",
+        help="high identity mode (rearrangements not allowed)",
+    )
+    refscaf.add_argument(
+        "-p",
+        "--preset",
+        default="asm5",
+        help="Preset option for Minimap2-based Reduction and/or Reference-based scaffolding. Possible options: asm5 (for ~0.1 percent average divergence), asm10 (for ~1 percent average divergence) and asm20( for > 1 percent average divergence). Default [%(default)s]",
+    )
+
+    gaps = parser.add_argument_group("Gap closing options")
+    gaps.add_argument("--nogapclosing", action="store_false", default=True)
+
+    stats = parser.add_argument_group("Meryl and Merqury options")
+    stats.add_argument(
+        "--runmerqury",
+        action="store_true",
+        default=False,
+        help="Run meryldb and merqury for assembly kmer multiplicity stats.",
+    )
+    stats.add_argument(
+        "-k", "--kmer", default=21, type=int, help="K-mer size for meryl [%(default)s]"
+    )
+
     # print help if no parameters
-    if len(sys.argv)==1:
+    if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(1)
-        
+
     o = parser.parse_args()
     if o.verbose:
-        o.log.write("Options: %s\n"%str(o))
+        o.log.write("Options: %s\n" % str(o))
 
     # need contigs or at least PE or MP libs to compute those
     if not o.fasta and not o.fastq:
         sys.stderr.write("Provide contigs and/or paired-end/mate pairs libraries\n")
         sys.exit(1)
-        
+
     # check if input files exists [o.fasta,] +
-    for fn in o.fastq + o.longreads: 
+    for fn in o.fastq + o.longreads:
         if not os.path.isfile(fn):
-            sys.stderr.write("No such file: %s\n"%fn)
+            sys.stderr.write("No such file: %s\n" % fn)
             sys.exit(1)
 
     # patch sspacebin
     sspacebin = os.path.join(root, "bin/SSPACE/SSPACE_Standard_v3.0.pl")
 
     # check if all executables exists & in correct versions
-    #If using merqury, check for R version, else do not bother
+    # If using merqury, check for R version, else do not bother
     if o.runmerqury:
-        dependencies = {'lastal': 800, 'lastdb': 800, 'GapCloser': 0, 'paste': 0, 'tr': 0, 'zcat': 0, 'platanus': 0, 'R' : 360, "minimap2" : 224, "miniasm" : 3, "gfastats" : 136, "meryl" : 13, "bwa" : 717, "snap-aligner" : 201, "k8-Linux" : 24 }
+        dependencies = {
+            "lastal": 800,
+            "lastdb": 800,
+            "GapCloser": 0,
+            "paste": 0,
+            "tr": 0,
+            "zcat": 0,
+            "platanus": 0,
+            "R": 360,
+            "minimap2": 224,
+            "miniasm": 3,
+            "gfastats": 136,
+            "meryl": 13,
+            "bwa": 717,
+            "snap-aligner": 201,
+            "k8-Linux": 24,
+        }
         if not o.fastq:
-            sys.stderr.write("\n[WARNING]:You need to provide a set of illumina reads as input through -i option in order to do a merqury analysis.\nElse use --nomerqury to skip it. Exiting now...\n")
+            sys.stderr.write(
+                "\n[WARNING]:You need to provide a set of illumina reads as input through -i option in order to do a merqury analysis.\nElse use --nomerqury to skip it. Exiting now...\n"
+            )
             sys.exit(1)
     else:
-        dependencies = {'lastal': 800, 'lastdb': 800, 'GapCloser': 0, 'paste': 0, 'tr': 0, 'zcat': 0, 'platanus': 0, "minimap2" : 224, "miniasm" : 3, "gfastats" : 136, "meryl" : 13, "bwa" : 717, "snap-aligner" : 201, "k8-Linux" : 24 }
+        dependencies = {
+            "lastal": 800,
+            "lastdb": 800,
+            "GapCloser": 0,
+            "paste": 0,
+            "tr": 0,
+            "zcat": 0,
+            "platanus": 0,
+            "minimap2": 224,
+            "miniasm": 3,
+            "gfastats": 136,
+            "meryl": 13,
+            "bwa": 717,
+            "snap-aligner": 201,
+            "k8-Linux": 24,
+        }
 
-    #for dependency in dependencies:
+    # for dependency in dependencies:
     check_dependency(dependencies)
 
-    #_check_dependencies(dependencies)
-    
-    # initialise pipeline
-    redundans(o.fastq, o.longreads, o.fasta, o.reference, o.outdir, o.mapq, \
-              o.threads, o.mem, o.resume, o.identity, o.overlap, o.minLength,  \
-              o.joins, o.linkratio, o.limit, o.iters, sspacebin, \
-              o.preset, o.noreduction, o.noscaffolding, o.nogapclosing, o.runmerqury, o.kmer, o.nocleaning, \
-              o.norearrangements, o.verbose, o.usebwa, o.minimap2reduce, o.index, o.minimap2scaffold, o.populateScaffolds, o.log, o.tmp)
+    # _check_dependencies(dependencies)
 
-if __name__=='__main__': 
+    # initialise pipeline
+    redundans(
+        o.fastq,
+        o.longreads,
+        o.fasta,
+        o.reference,
+        o.outdir,
+        o.mapq,
+        o.threads,
+        o.mem,
+        o.resume,
+        o.identity,
+        o.overlap,
+        o.minLength,
+        o.joins,
+        o.linkratio,
+        o.limit,
+        o.iters,
+        sspacebin,
+        o.preset,
+        o.noreduction,
+        o.noscaffolding,
+        o.nogapclosing,
+        o.runmerqury,
+        o.kmer,
+        o.nocleaning,
+        o.norearrangements,
+        o.verbose,
+        o.usebwa,
+        o.minimap2reduce,
+        o.index,
+        o.minimap2scaffold,
+        o.populateScaffolds,
+        o.log,
+        o.tmp,
+    )
+
+
+if __name__ == "__main__":
     t0 = datetime.now()
     try:
         main()
     except KeyboardInterrupt:
         sys.stderr.write("\nCtrl-C pressed!      \n")
-    dt = datetime.now()-t0
-    sys.stderr.write("#Time elapsed: %s\n"%dt)
+    dt = datetime.now() - t0
+    sys.stderr.write("#Time elapsed: %s\n" % dt)
