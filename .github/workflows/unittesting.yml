@@ -3,10 +3,10 @@ name: Run Unit Tests
 on:
   push:
     branches:
-      - main
+      - master
   pull_request:
     branches:
-      - main
+      - master
   workflow_dispatch:
   #schedule:
   #  - cron: '0 0 * * 0'
@@ -76,6 +76,11 @@ jobs:
         tar zxvf R-4.1.0.tar.gz
         rm R-4.1.0.tar.gz
         cd R-4.1.0/
+
+        #Attemtp to fix the R configure issue
+        sudo apt-get install -y pkg-config
+        export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
+
         ./configure --enable-R-shlib --with-curl
         make
         make install
