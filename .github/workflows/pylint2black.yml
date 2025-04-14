@@ -1,7 +1,9 @@
 name: Pylint2black
 
-on: [push]
-
+#on: [push]
+on:
+  workflows_dispatch:
+  
 jobs:
   build:
     runs-on: ubuntu-latest
