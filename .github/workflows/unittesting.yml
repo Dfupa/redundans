@@ -65,15 +65,15 @@ jobs:
     - name: Set up Redundans environment
       run: |
         # Download and compile Redundans
-        mkdir -p /root/src
-        cd /root/src
+        mkdir -p $HOME/src
+        cd $HOME/src
         git clone --recursive https://github.com/Gabaldonlab/redundans.git
         cd redundans
         bin/.compile.sh
 
     - name: Run unit tests
       run: |
-        cd /root/src/redundans
+        cd $HOME/src/redundans
         ./redundans.py -v -i test/*_?.fq.gz -f test/contigs.fa -o test/run1
         #Test it using minimap2 for the reduction step, increasing performance for large genomes
         ./redundans.py -v -i test/*_?.fq.gz -f test/contigs.fa --minimap2reduce -o test/run2
