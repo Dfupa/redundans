@@ -61,34 +61,6 @@ jobs:
         python3 -m pip install --upgrade pip
         pip3 install --upgrade matplotlib Pillow
 
-        echo "TESTING CURL VERSIONS"
-        curl --version
-        dpkg -s libcurl4-openssl-dev | grep Version
-        #sudo apt-get upgrade curl -y
-        #curl --version
-
-    - name: Install R from source
-      run: |
-        #sudo apt-get install -y libcurl4-openssl-dev
-        mkdir -p $HOME/src
-        cd $HOME/src
-        wget https://cran.r-project.org/src/base/R-4/R-4.1.0.tar.gz
-        tar zxvf R-4.1.0.tar.gz
-        rm R-4.1.0.tar.gz
-        cd R-4.1.0/
-
-        #Attemtp to fix the R configure issue
-        sudo apt-get install -y pkg-config
-        export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
-
-        ./configure --enable-R-shlib --with-curl
-        make
-        make install
-
-        # Install R packages as needed
-        Rscript -e 'install.packages("ggplot2", repos = "http://cran.us.r-project.org")'
-        Rscript -e 'install.packages("scales", repos = "http://cran.us.r-project.org")'
-        Rscript -e 'install.packages("argparse", repos = "http://cran.us.r-project.org")'
 
     - name: Set up Redundans environment
       run: |
